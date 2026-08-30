@@ -1,0 +1,396 @@
+import React, { useState, useMemo } from "react";
+
+// Palette — registre comptable d'église : encre profonde, parchemin, or, sceau
+const COLORS = {
+  ink: "#1B2A3D",
+  inkDeep: "#101B29",
+  parchment: "#F3EDDD",
+  parchmentDark: "#E7DCC0",
+  gold: "#B8925A",
+  goldBright: "#D4AF6A",
+  green: "#3F6E52",
+  burgundy: "#7A2E3A",
+};
+
+function formatFCFA(n) {
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(Math.round(n));
+  return sign + abs.toLocaleString("fr-FR") + " FCFA";
+}
+
+let idCounter = 1;
+
+export default function App() {
+  const [transactions, setTransactions] = useState([
+    { id: idCounter++, type: "entrée", label: "Dîme du dimanche", amount: 45000 },
+    { id: idCounter++, type: "entrée", label: "Offrande spéciale", amount: 12000 },
+    { id: idCounter++, type: "sortie", label: "Achat matériel sono", amount: 8000 },
+  ]);
+  const [type, setType] = useState("entrée");
+  const [label, setLabel] = useState("");
+  const [amount, setAmount] = useState("");
+  const [flash, setFlash] = useState(null);
+
+  const solde = useMemo(
+    () =>
+      transactions.reduce(
+        (acc, t) => acc + (t.type === "entrée" ? t.amount : -t.amount),
+        0
+      ),
+    [transactions]
+  );
+
+  const totalEntrees = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.type === "entrée")
+        .reduce((a, t) => a + t.amount, 0),
+    [transactions]
+  );
+  const totalSorties = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.type === "sortie")
+        .reduce((a, t) => a + t.amount, 0),
+    [transactions]
+  );
+
+  // Aperçu en direct pendant la saisie, avant même de valider
+  const previewSolde = useMemo(() => {
+    const n = parseFloat(amount);
+    if (!amount || isNaN(n)) return null;
+    return solde + (type === "entrée" ? n : -n);
+  }, [amount, type, solde]);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const n = parseFloat(amount);
+    if (!label.trim() || !amount || isNaN(n) || n <= 0) return;
+    setTransactions((prev) => [
+      ...prev,
+      { id: idCounter++, type, label: label.trim(), amount: n },
+    ]);
+    setLabel("");
+    setAmount("");
+    setFlash(type);
+    setTimeout(() => setFlash(null), 600);
+  }
+
+  function handleDelete(id) {
+    setTransactions((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: `radial-gradient(1200px 600px at 50% -10%, ${COLORS.ink}, ${COLORS.inkDeep})`,
+        padding: "40px 16px",
+        fontFamily: "'Georgia', 'Iowan Old Style', serif",
+        color: COLORS.parchment,
+        display: "flex",
+        justifyContent: "center",
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 720 }}>
+        {/* En-tête façon registre */}
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div
+            style={{
+              fontFamily: "'Trebuchet MS', sans-serif",
+              letterSpacing: 4,
+              fontSize: 11,
+              color: COLORS.gold,
+              textTransform: "uppercase",
+              marginBottom: 8,
+            }}
+          >
+            Registre des finances
+          </div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 32,
+              fontWeight: 700,
+              letterSpacing: 0.5,
+            }}
+          >
+            Livre de caisse de l'église
+          </h1>
+        </div>
+
+        {/* Le solde — élément signature, façon sceau/tampon comptable */}
+        <div
+          style={{
+            background: COLORS.parchment,
+            color: COLORS.ink,
+            borderRadius: 4,
+            border: `1px solid ${COLORS.goldBright}`,
+            boxShadow: "0 20px 40px rgba(0,0,0,0.35)",
+            padding: "28px 24px",
+            marginBottom: 20,
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundImage:
+                "repeating-linear-gradient(180deg, transparent, transparent 27px, rgba(27,42,61,0.05) 28px)",
+              pointerEvents: "none",
+            }}
+          />
+          <div style={{ position: "relative" }}>
+            <div
+              style={{
+                fontFamily: "'Trebuchet MS', sans-serif",
+                fontSize: 11,
+                letterSpacing: 3,
+                textTransform: "uppercase",
+                color: COLORS.burgundy,
+                marginBottom: 6,
+              }}
+            >
+              Solde actuel
+            </div>
+            <div
+              style={{
+                fontFamily: "'Courier New', monospace",
+                fontSize: 44,
+                fontWeight: 700,
+                lineHeight: 1,
+                transition: "transform 0.25s ease",
+                transform: flash ? "scale(1.03)" : "scale(1)",
+                color: solde < 0 ? COLORS.burgundy : COLORS.ink,
+              }}
+            >
+              {formatFCFA(solde)}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 24,
+                marginTop: 16,
+                fontFamily: "'Trebuchet MS', sans-serif",
+                fontSize: 13,
+              }}
+            >
+              <span style={{ color: COLORS.green }}>
+                ▲ Entrées&nbsp;: {formatFCFA(totalEntrees)}
+              </span>
+              <span style={{ color: COLORS.burgundy }}>
+                ▼ Sorties&nbsp;: {formatFCFA(totalSorties)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Formulaire de saisie */}
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            border: `1px solid rgba(184,146,90,0.3)`,
+            borderRadius: 4,
+            padding: 20,
+            marginBottom: 24,
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {["entrée", "sortie"].map((t) => (
+              <button
+                type="button"
+                key={t}
+                onClick={() => setType(t)}
+                style={{
+                  flex: 1,
+                  padding: "10px 12px",
+                  borderRadius: 3,
+                  border: `1px solid ${
+                    type === t ? COLORS.gold : "rgba(243,237,221,0.25)"
+                  }`,
+                  background: type === t ? COLORS.gold : "transparent",
+                  color: type === t ? COLORS.inkDeep : COLORS.parchment,
+                  fontFamily: "'Trebuchet MS', sans-serif",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {t === "entrée" ? "+ Entrée" : "− Sortie"}
+              </button>
+            ))}
+          </div>
+
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Motif (ex : Dîme, Achat fournitures...)"
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "10px 12px",
+              marginBottom: 10,
+              borderRadius: 3,
+              border: "1px solid rgba(243,237,221,0.25)",
+              background: "rgba(243,237,221,0.06)",
+              color: COLORS.parchment,
+              fontFamily: "inherit",
+              fontSize: 15,
+              outline: "none",
+            }}
+          />
+
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Montant (FCFA)"
+            inputMode="decimal"
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "10px 12px",
+              marginBottom: 6,
+              borderRadius: 3,
+              border: "1px solid rgba(243,237,221,0.25)",
+              background: "rgba(243,237,221,0.06)",
+              color: COLORS.parchment,
+              fontFamily: "'Courier New', monospace",
+              fontSize: 16,
+              outline: "none",
+            }}
+          />
+
+          {/* Aperçu en direct du nouveau solde, avant validation */}
+          <div
+            style={{
+              minHeight: 20,
+              fontFamily: "'Trebuchet MS', sans-serif",
+              fontSize: 12,
+              color: COLORS.goldBright,
+              marginBottom: 14,
+            }}
+          >
+            {previewSolde !== null &&
+              `Nouveau solde après validation : ${formatFCFA(previewSolde)}`}
+          </div>
+
+          <button
+            type="submit"
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: 3,
+              border: "none",
+              background: COLORS.goldBright,
+              color: COLORS.inkDeep,
+              fontFamily: "'Trebuchet MS', sans-serif",
+              fontWeight: 700,
+              fontSize: 14,
+              letterSpacing: 1,
+              textTransform: "uppercase",
+              cursor: "pointer",
+            }}
+          >
+            Enregistrer le mouvement
+          </button>
+        </form>
+
+        {/* Registre des mouvements */}
+        <div>
+          <div
+            style={{
+              fontFamily: "'Trebuchet MS', sans-serif",
+              fontSize: 11,
+              letterSpacing: 3,
+              textTransform: "uppercase",
+              color: COLORS.gold,
+              marginBottom: 10,
+            }}
+          >
+            Mouvements enregistrés
+          </div>
+          <div
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(184,146,90,0.2)",
+              borderRadius: 4,
+              overflow: "hidden",
+            }}
+          >
+            {transactions.length === 0 && (
+              <div
+                style={{
+                  padding: 20,
+                  textAlign: "center",
+                  color: "rgba(243,237,221,0.5)",
+                  fontSize: 14,
+                }}
+              >
+                Aucun mouvement pour l'instant.
+              </div>
+            )}
+            {[...transactions].reverse().map((t) => (
+              <div
+                key={t.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "12px 16px",
+                  borderBottom: "1px solid rgba(184,146,90,0.15)",
+                  fontFamily: "'Trebuchet MS', sans-serif",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background:
+                        t.type === "entrée" ? COLORS.green : COLORS.burgundy,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ fontSize: 14 }}>{t.label}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <span
+                    style={{
+                      fontFamily: "'Courier New', monospace",
+                      fontSize: 14,
+                      color: t.type === "entrée" ? COLORS.green : COLORS.burgundy,
+                    }}
+                  >
+                    {t.type === "entrée" ? "+" : "−"}
+                    {formatFCFA(t.amount).replace("-", "")}
+                  </span>
+                  <button
+                    onClick={() => handleDelete(t.id)}
+                    aria-label="Supprimer"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "rgba(243,237,221,0.4)",
+                      cursor: "pointer",
+                      fontSize: 16,
+                      padding: 4,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
