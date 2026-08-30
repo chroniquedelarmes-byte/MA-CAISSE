@@ -2,7 +2,7 @@
 
 Application de gestion des finances de l'église — le solde se calcule automatiquement dès qu'une entrée ou une sortie est saisie.
 
-## Tester en local
+## Tester en local.    
 
 ```bash
 npm install
