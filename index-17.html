@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cotisations de l'église</title>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+const { useState, useMemo, useRef } = React;
+
+const COLORS = {
+  ink: "#1B2A3D",
+  inkDeep: "#101B29",
+  parchment: "#F3EDDD",
+  parchmentDark: "#E7DCC0",
+  gold: "#B8925A",
+  goldBright: "#D4AF6A",
+  green: "#3F6E52",
+  burgundy: "#7A2E3A",
+};
+
+const CATEGORIES = [
+  "Cotisation générale",
+  "Cotisation mariage",
+  "Cotisation décès",
+  "Engagement spécial",
+];
+
+function formatFCFA(n) {
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(Math.round(n));
+  return sign + abs.toLocaleString("fr-FR") + " FCFA";
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }) + " à " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function initials(name) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+}
+
+let idCounter = 1;
+let paymentIdCounter = 1;
+
+function Avatar({ member, onPhotoChange, size = 56 }) {
+  const fileInputRef = useRef(null);
+
+  return (
+    <div
+      onClick={() => fileInputRef.current && fileInputRef.current.click()}
+      title="Cliquer pour ajouter/changer la photo"
+      style={{
+        width: size,
+        height: size,
+        minWidth: size,
+        borderRadius: "50%",
+        border: `2px solid ${COLORS.goldBright}`,
+        background: member.photo
+          ? `url(${member.photo}) center/cover no-repeat`
+          : COLORS.ink,
+        color: COLORS.parchment,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "'Trebuchet MS', sans-serif",
+        fontWeight: 700,
+        fontSize: size / 2.6,
+        cursor: "pointer",
+        flexShrink: 0,
+        overflow: "hidden",
+      }}
+    >
+      {!member.photo && initials(member.name || "?")}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={(e) => onPhotoChange(e)}
+        style={{ display: "none" }}
+      />
+    </div>
+  );
+}
+
+function App() {
+  const [members, setMembers] = useState([
+    {
+      id: idCounter++,
+      name: "M. Colonda",
+      target: 500000,
+      paid: 0,
+      category: "Cotisation générale",
+      photo: null,
+      payments: [],
+    },
+    {
+      id: idCounter++,
+      name: "Mme Aya",
+      target: 200000,
+      paid: 50000,
+      category: "Cotisation générale",
+      photo: null,
+      payments: [],
+    },
+  ]);
+
+  const [newName, setNewName] = useState("");
+  const [newTarget, setNewTarget] = useState("");
+  const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
+  const [payAmounts, setPayAmounts] = useState({});
+  const [openMemberId, setOpenMemberId] = useState(null);
+  const [historyOpenId, setHistoryOpenId] = useState(null);
+
+  const totals = useMemo(() => {
+    return members.reduce(
+      (acc, m) => {
+        acc.target += m.target;
+        acc.paid += m.paid;
+        return acc;
+      },
+      { target: 0, paid: 0 }
+    );
+  }, [members]);
+
+  function addMember(e) {
+    e.preventDefault();
+    const t = parseFloat(newTarget);
+    if (!newName.trim() || !newTarget || isNaN(t) || t <= 0) return;
+    setMembers((prev) => [
+      ...prev,
+      {
+        id: idCounter++,
+        name: newName.trim(),
+        target: t,
+        paid: 0,
+        category: newCategory,
+        photo: null,
+        payments: [],
+      },
+    ]);
+    setNewName("");
+    setNewTarget("");
+    setNewCategory(CATEGORIES[0]);
+  }
+
+  function registerPayment(memberId) {
+    const raw = payAmounts[memberId];
+    const n = parseFloat(raw);
+    if (!raw || isNaN(n) || n <= 0) return;
+    setMembers((prev) =>
+      prev.map((m) => {
+        if (m.id !== memberId) return m;
+        const remaining = m.target - m.paid;
+        if (remaining <= 0) return m;
+        const amountToAdd = Math.min(n, remaining);
+        const payment = {
+          id: paymentIdCounter++,
+          amount: amountToAdd,
+          date: new Date().toISOString(),
+        };
+        return {
+          ...m,
+          paid: m.paid + amountToAdd,
+          payments: [...m.payments, payment],
+        };
+      })
+    );
+    setPayAmounts((prev) => ({ ...prev, [memberId]: "" }));
+  }
+
+  function deleteMember(memberId) {
+    setMembers((prev) => prev.filter((m) => m.id !== memberId));
+  }
+
+  function handlePhotoChange(memberId, e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setMembers((prev) =>
+        prev.map((m) => (m.id === memberId ? { ...m, photo: reader.result } : m))
+      );
+    };
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: `radial-gradient(1200px 600px at 50% -10%, ${COLORS.ink}, ${COLORS.inkDeep})`,
+        padding: "40px 16px",
+        fontFamily: "'Georgia', 'Iowan Old Style', serif",
+        color: COLORS.parchment,
+        display: "flex",
+        justifyContent: "center",
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 720 }}>
+        {/* En-tête */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div
+            style={{
+              fontFamily: "'Trebuchet MS', sans-serif",
+              letterSpacing: 4,
+              fontSize: 11,
+              color: COLORS.gold,
+              textTransform: "uppercase",
+              marginBottom: 8,
+            }}
+          >
+            Registre des membres
+          </div>
+          <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700 }}>
+            Cotisations de l'église
+          </h1>
+        </div>
+
+        {/* Totaux généraux */}
+        <div
+          style={{
+            background: COLORS.parchment,
+            color: COLORS.ink,
+            borderRadius: 4,
+            border: `1px solid ${COLORS.goldBright}`,
+            boxShadow: "0 20px 40px rgba(0,0,0,0.35)",
+            padding: "20px 22px",
+            marginBottom: 20,
+            display: "flex",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontFamily: "'Trebuchet MS', sans-serif",
+                fontSize: 11,
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                color: COLORS.burgundy,
+              }}
+            >
+              Total attendu
+            </div>
+            <div
+              style={{
+                fontFamily: "'Courier New', monospace",
+                fontSize: 22,
+                fontWeight: 700,
+              }}
+            >
+              {formatFCFA(totals.target)}
+            </div>
+          </div>
+          <div>
+            <div
+              style={{
+                fontFamily: "'Trebuchet MS', sans-serif",
+                fontSize: 11,
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                color: COLORS.green,
+              }}
+            >
+              Total déjà versé
+            </div>
+            <div
+              style={{
+                fontFamily: "'Courier New', monospace",
+                fontSize: 22,
+                fontWeight: 700,
+              }}
+            >
+              {formatFCFA(totals.paid)}
+            </div>
+          </div>
+          <div>
+            <div
+              style={{
+                fontFamily: "'Trebuchet MS', sans-serif",
+                fontSize: 11,
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                color: COLORS.ink,
+              }}
+            >
+              Reste global
+            </div>
+            <div
+              style={{
+                fontFamily: "'Courier New', monospace",
+                fontSize: 22,
+                fontWeight: 700,
+              }}
+            >
+              {formatFCFA(totals.target - totals.paid)}
+            </div>
+          </div>
+        </div>
+
+        {/* Formulaire d'ajout de membre */}
+        <form
+          onSubmit={addMember}
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            border: `1px solid rgba(184,146,90,0.3)`,
+            borderRadius: 4,
+            padding: 18,
+            marginBottom: 24,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "'Trebuchet MS', sans-serif",
+              fontSize: 11,
+              letterSpacing: 2,
+              textTransform: "uppercase",
+              color: COLORS.gold,
+              marginBottom: 10,
+            }}
+          >
+            Ajouter un chrétien
+          </div>
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Nom du chrétien"
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "10px 12px",
+              marginBottom: 10,
+              borderRadius: 3,
+              border: "1px solid rgba(243,237,221,0.25)",
+              background: "rgba(243,237,221,0.06)",
+              color: COLORS.parchment,
+              fontFamily: "inherit",
+              fontSize: 15,
+              outline: "none",
+            }}
+          />
+          <input
+            value={newTarget}
+            onChange={(e) => setNewTarget(e.target.value)}
+            placeholder="Montant fixé (FCFA)"
+            inputMode="decimal"
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "10px 12px",
+              marginBottom: 10,
+              borderRadius: 3,
+              border: "1px solid rgba(243,237,221,0.25)",
+              background: "rgba(243,237,221,0.06)",
+              color: COLORS.parchment,
+              fontFamily: "'Courier New', monospace",
+              fontSize: 15,
+              outline: "none",
+            }}
+          />
+          <select
+            value={newCategory}
+            onChange={(e) => setNewCategory(e.target.value)}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "10px 12px",
+              marginBottom: 12,
+              borderRadius: 3,
+              border: "1px solid rgba(243,237,221,0.25)",
+              background: "rgba(243,237,221,0.06)",
+              color: COLORS.parchment,
+              fontFamily: "'Trebuchet MS', sans-serif",
+              fontSize: 14,
+              outline: "none",
+            }}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c} style={{ color: COLORS.ink }}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            style={{
+              width: "100%",
+              padding: "11px",
+              borderRadius: 3,
+              border: "none",
+              background: COLORS.goldBright,
+              color: COLORS.inkDeep,
+              fontFamily: "'Trebuchet MS', sans-serif",
+              fontWeight: 700,
+              fontSize: 13,
+              letterSpacing: 1,
+              textTransform: "uppercase",
+              cursor: "pointer",
+            }}
+          >
+            Ajouter
+          </button>
+        </form>
+
+        {/* Liste des membres */}
+        <div
+          style={{
+            fontFamily: "'Trebuchet MS', sans-serif",
+            fontSize: 11,
+            letterSpacing: 3,
+            textTransform: "uppercase",
+            color: COLORS.gold,
+            marginBottom: 10,
+          }}
+        >
+          Fiches individuelles
+        </div>
+
+        {members.length === 0 && (
+          <div
+            style={{
+              padding: 20,
+              textAlign: "center",
+              color: "rgba(243,237,221,0.5)",
+              fontSize: 14,
+              border: "1px solid rgba(184,146,90,0.2)",
+              borderRadius: 4,
+            }}
+          >
+            Aucun chrétien enregistré pour l'instant.
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {members.map((m) => {
+            const reste = m.target - m.paid;
+            const pct = Math.min(100, Math.round((m.paid / m.target) * 100));
+            const isOpen = openMemberId === m.id;
+            const isSoldee = reste <= 0;
+            const isHistoryOpen = historyOpenId === m.id;
+            return (
+              <div
+                key={m.id}
+                style={{
+                  background: COLORS.parchment,
+                  color: COLORS.ink,
+                  borderRadius: 4,
+                  border: `1px solid ${COLORS.goldBright}`,
+                  padding: "16px 18px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    marginBottom: 10,
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <Avatar
+                      member={m}
+                      onPhotoChange={(e) => handlePhotoChange(m.id, e)}
+                    />
+                    <div>
+                      <div
+                        style={{
+                          fontFamily: "'Trebuchet MS', sans-serif",
+                          fontWeight: 700,
+                          fontSize: 16,
+                        }}
+                      >
+                        {m.name}
+                      </div>
+                      <div
+                        style={{
+                          display: "inline-block",
+                          marginTop: 4,
+                          padding: "2px 8px",
+                          borderRadius: 10,
+                          background: "rgba(122,46,58,0.1)",
+                          color: COLORS.burgundy,
+                          fontFamily: "'Trebuchet MS', sans-serif",
+                          fontSize: 10,
+                          letterSpacing: 0.5,
+                          textTransform: "uppercase",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {m.category}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => deleteMember(m.id)}
+                    aria-label="Supprimer"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "rgba(27,42,61,0.4)",
+                      cursor: "pointer",
+                      fontSize: 16,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 20,
+                    marginBottom: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "'Trebuchet MS', sans-serif",
+                        fontSize: 10,
+                        letterSpacing: 1,
+                        textTransform: "uppercase",
+                        color: COLORS.burgundy,
+                      }}
+                    >
+                      Reste à payer
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'Courier New', monospace",
+                        fontSize: 20,
+                        fontWeight: 700,
+                        color: reste <= 0 ? COLORS.green : COLORS.burgundy,
+                      }}
+                    >
+                      {formatFCFA(Math.max(0, reste))}
+                    </div>
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "'Trebuchet MS', sans-serif",
+                        fontSize: 10,
+                        letterSpacing: 1,
+                        textTransform: "uppercase",
+                        color: COLORS.green,
+                      }}
+                    >
+                      Déjà versé
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'Courier New', monospace",
+                        fontSize: 20,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {formatFCFA(m.paid)}
+                    </div>
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "'Trebuchet MS', sans-serif",
+                        fontSize: 10,
+                        letterSpacing: 1,
+                        textTransform: "uppercase",
+                        color: COLORS.ink,
+                      }}
+                    >
+                      Montant fixé
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'Courier New', monospace",
+                        fontSize: 20,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {formatFCFA(m.target)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Barre de progression */}
+                <div
+                  style={{
+                    height: 6,
+                    borderRadius: 3,
+                    background: "rgba(27,42,61,0.12)",
+                    overflow: "hidden",
+                    marginBottom: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${pct}%`,
+                      background: reste <= 0 ? COLORS.green : COLORS.goldBright,
+                      transition: "width 0.3s ease",
+                    }}
+                  />
+                </div>
+
+                {/* Historique des paiements */}
+                {m.payments.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <button
+                      onClick={() =>
+                        setHistoryOpenId(isHistoryOpen ? null : m.id)
+                      }
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: COLORS.gold,
+                        fontFamily: "'Trebuchet MS', sans-serif",
+                        fontSize: 11,
+                        letterSpacing: 0.5,
+                        textTransform: "uppercase",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        padding: 0,
+                      }}
+                    >
+                      {isHistoryOpen ? "▲ Masquer l'historique" : `▼ Historique (${m.payments.length})`}
+                    </button>
+                    {isHistoryOpen && (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          border: "1px solid rgba(27,42,61,0.15)",
+                          borderRadius: 3,
+                          overflow: "hidden",
+                        }}
+                      >
+                        {m.payments
+                          .slice()
+                          .reverse()
+                          .map((p) => (
+                            <div
+                              key={p.id}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                padding: "7px 10px",
+                                fontSize: 12.5,
+                                borderBottom: "1px solid rgba(27,42,61,0.08)",
+                                background: "rgba(63,110,82,0.04)",
+                              }}
+                            >
+                              <span style={{ color: "rgba(27,42,61,0.65)" }}>
+                                {formatDate(p.date)}
+                              </span>
+                              <span
+                                style={{
+                                  fontFamily: "'Courier New', monospace",
+                                  fontWeight: 700,
+                                  color: COLORS.green,
+                                }}
+                              >
+                                {formatFCFA(p.amount)}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {isSoldee ? (
+                  <div
+                    style={{
+                      width: "100%",
+                      padding: "9px",
+                      borderRadius: 3,
+                      border: `1px solid ${COLORS.green}`,
+                      background: "rgba(63,110,82,0.08)",
+                      color: COLORS.green,
+                      fontFamily: "'Trebuchet MS', sans-serif",
+                      fontWeight: 700,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                      textAlign: "center",
+                    }}
+                  >
+                    ✓ Cotisation soldée
+                  </div>
+                ) : isOpen ? (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      value={payAmounts[m.id] || ""}
+                      onChange={(e) =>
+                        setPayAmounts((prev) => ({
+                          ...prev,
+                          [m.id]: e.target.value,
+                        }))
+                      }
+                      placeholder={`Max ${formatFCFA(reste)}`}
+                      inputMode="decimal"
+                      style={{
+                        flex: 1,
+                        boxSizing: "border-box",
+                        padding: "9px 10px",
+                        borderRadius: 3,
+                        border: "1px solid rgba(27,42,61,0.25)",
+                        background: "rgba(27,42,61,0.04)",
+                        color: COLORS.ink,
+                        fontFamily: "'Courier New', monospace",
+                        fontSize: 14,
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        registerPayment(m.id);
+                        setOpenMemberId(null);
+                      }}
+                      style={{
+                        padding: "9px 14px",
+                        borderRadius: 3,
+                        border: "none",
+                        background: COLORS.green,
+                        color: COLORS.parchment,
+                        fontFamily: "'Trebuchet MS', sans-serif",
+                        fontWeight: 700,
+                        fontSize: 12,
+                        letterSpacing: 0.5,
+                        textTransform: "uppercase",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Valider
+                    </button>
+                    <button
+                      onClick={() => setOpenMemberId(null)}
+                      style={{
+                        padding: "9px 12px",
+                        borderRadius: 3,
+                        border: "1px solid rgba(27,42,61,0.2)",
+                        background: "transparent",
+                        color: COLORS.ink,
+                        fontFamily: "'Trebuchet MS', sans-serif",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setOpenMemberId(m.id)}
+                    style={{
+                      width: "100%",
+                      padding: "9px",
+                      borderRadius: 3,
+                      border: `1px solid ${COLORS.gold}`,
+                      background: "transparent",
+                      color: COLORS.burgundy,
+                      fontFamily: "'Trebuchet MS', sans-serif",
+                      fontWeight: 700,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Enregistrer un paiement
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+    </script>
+  </body>
+</html>
