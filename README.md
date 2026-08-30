@@ -16,7 +16,7 @@ Ouvre ensuite l'adresse affichée dans le terminal (ex : http://localhost:5173).
 1. Crée un nouveau dépôt sur https://github.com/new (nom suggéré : `finances-eglise`)
 2. Dans ce dossier, exécute :
 
-```bash
+```bash J
 git init
 git add .
 git commit -m "Première version : registre avec calcul automatique du solde"
