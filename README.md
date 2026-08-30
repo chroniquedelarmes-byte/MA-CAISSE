@@ -6,7 +6,7 @@ Application de gestion des finances de l'église — le solde se calcule automat
 
 ```bash
 npm install
-npm run dev
+npm run dev v
 ```
 
 Ouvre ensuite l'adresse affichée dans le terminal (ex : http://localhost:5173).
